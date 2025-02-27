@@ -1,0 +1,10 @@
+/target
+**/*.rs.bk
+Cargo.lock
+.cargo-ok
+artifacts/
+schema/
+*.log
+gas_results.csv
+gas_analysis.png
+.env

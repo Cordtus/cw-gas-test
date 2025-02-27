@@ -1,0 +1,31 @@
+[package]
+name = "babylon-gas-test"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "A contract for testing gas costs on Babylon blockchain"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+cosmwasm-std = "1.5.0"
+cw-storage-plus = "1.1.0"
+cw2 = "1.1.1"
+schemars = "0.8.16"
+serde = { version = "1.0.189", default-features = false, features = ["derive"] }
+thiserror = "1.0.49"
+
+[dev-dependencies]
+cw-multi-test = "0.17.0"
+
+[profile.release]
+opt-level = 3
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 1
+panic = 'abort'
+incremental = false
+overflow-checks = true
