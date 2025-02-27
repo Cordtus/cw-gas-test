@@ -8,3 +8,4 @@ schema/
 gas_results.csv
 gas_analysis.png
 .env
+/scripts/node_modules/

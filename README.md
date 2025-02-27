@@ -1,6 +1,16 @@
-# Babylon Gas Testing Project
+# Babylon Gas Test
 
-This project measures the gas costs of storing different message sizes and formats on the Babylon blockchain. It helps determine the cost-efficiency of various data storage patterns.
+A toolkit for measuring and analyzing gas costs for data storage on the Babylon blockchain. This repository contains a CosmWasm smart contract and automated testing tools to measure transaction costs for various message sizes and formats.
+
+For a detailed analysis of initial findings produced by this test, (with default parameters) see this [quick analysist](https://gist.github.com/Cordtus/8753d81f135055e06973894cb3455f05).
+
+## Key Findings
+
+Storage costs on Babylon follow a linear model:
+
+- Base cost: ~124,174 gas units (~0.000248 BBN)
+- Marginal cost: ~40.34 gas units per byte (~0.00000008 BBN)
+- Perfect linearity (R² = 1.0000)
 
 ## Project Structure
 
@@ -15,110 +25,135 @@ babylon-gas-test/
 │   ├── test-gas.js      # Gas testing script
 │   ├── analyze-results.js # Analysis of results
 │   ├── package.json     # JS dependencies
-│   └── .env             # Environment variables
+│   └── .env             # Environment variables (create from template)
 ├── Cargo.toml           # Rust dependencies
 ├── rust-toolchain.toml  # Rust version spec
-├── build.sh             # Compilation script
-└── gas_results.csv      # Test results (generated)
+└── build.sh             # Compilation script
 ```
 
 ## Setup Instructions
 
-### 1. Prepare the Rust contract
+### Prerequisites
+
+- Rust (1.74.0+)
+- Node.js (v18.0.0+)
+- Yarn
+- Docker (for contract optimization)
+- Access to Babylon testnet with test tokens
+
+### 1. Prepare the Environment
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/babylon-gas-test.git
+git clone https://github.com/Cordtus/babylon-gas-test.git
 cd babylon-gas-test
 
-# Build the contract with Docker (recommended)
+# Make build script executable
 chmod +x build.sh
+```
+
+### 2. Build the Contract
+
+```bash
+# Compile and optimize with Docker
 ./build.sh
 ```
 
-This will create the optimized WASM file in the `artifacts/` directory.
+This creates an optimized WASM file in the `artifacts/` directory.
 
-### 2. Set up JavaScript automation
+### 3. Set Up JavaScript Automation
 
 ```bash
-# Navigate to the scripts directory
+# Move to scripts directory
 cd scripts
 
 # Install dependencies
-npm install
+yarn
 
-# Create .env file with your mnemonic
+# Create .env file
 cp .env.template .env
-# Edit .env with your wallet mnemonic
 ```
 
-## Running Gas Tests
-
-You can run the entire test suite with a single command:
-
-```bash
-npm run test
-```
-
-This will:
-
-1. Deploy the contract to Babylon testnet (unless CONTRACT_ADDRESS is provided in .env)
-2. Test single character storage costs (letters, numbers, Unicode characters)
-3. Test various message lengths (from 1 to 2000 bytes)
-4. Test different data formats (JSON, Base64, Hex)
-5. Save results to gas_results.csv
-
-## Analyzing Results
-
-After running the tests, analyze the results with:
-
-```bash
-npm run analyze
-```
-
-This provides:
-
-- Base gas cost (fixed overhead)
-- Marginal cost per byte
-- Cost predictions for different message sizes
-- Comparison of data formats
-
-## Custom Configuration
-
-You can customize the testing parameters in `config.js`:
-
-```javascript
-// Edit test message lengths
-TEST_MESSAGE_LENGTHS: [1, 10, 50, 100, 200, 500, 1000, 2000],
-
-// Change output file
-OUTPUT_FILE: 'gas_results.csv'
-```
-
-## Using an Existing Contract
-
-If you've already deployed the contract and want to run more tests:
-
-```bash
-# Add the contract address to .env
-echo "CONTRACT_ADDRESS=bbn1..." >> .env
-
-# Run tests on the existing contract
-npm run test
-```
-
-## Notes on Gas Costs
-
-After analyzing the results, you'll have concrete data to:
-
-1. Predict costs for specific data sizes
-2. Optimize your storage patterns
-3. Choose the most efficient data formats
-4. Make informed decisions about on-chain vs. off-chain storage
-
-The analysis will show you the linear relationship between data size and gas cost, allowing you to calculate:
+Edit `.env` to add your mnemonic:
 
 ```sh
-Total Gas = Base Gas + (Marginal Gas per Byte × Message Size)
-Total Cost = Total Gas × Gas Price
+MNEMONIC="word1 word2 word3 ... word24"
 ```
+
+### 4. Deploy and Test
+
+```bash
+# Deploy contract
+yarn deploy
+
+# Run gas tests
+yarn test
+
+# Analyze results
+yarn analyze
+```
+
+This will create:
+
+- `gas_results.csv` - Raw test data
+- `gas_analysis.md` - Analysis summary
+
+## Customizing Tests
+
+Edit `config.js` to adjust test parameters:
+
+```javascript
+// Change test message lengths
+TEST_MESSAGE_LENGTHS: [1, 10, 50, 100, 200, 500, 1000, 2000],
+
+// Modify RPC endpoint
+RPC_ENDPOINT: 'https://babylon-testnet-rpc.nodes.guru',
+
+// Change gas price
+GAS_PRICE: '0.002ubbn',
+```
+
+## Running on Existing Contract
+
+To test with an already deployed contract:
+
+```bash
+# Add to .env
+CONTRACT_ADDRESS=bbn1...
+
+# Run tests without redeployment
+yarn test
+```
+
+## Adapting for Other Chains
+
+This toolkit can be adapted for any CosmWasm-enabled chain:
+
+1. Update `config.js` with the chain's RPC endpoints and gas price
+
+2. Modify `deploy.js` if needed to adjust for different chain parameters:
+
+   ```javascript
+   const wallet = await DirectSecp256k1HdWallet.fromMnemonic(process.env.MNEMONIC, {
+      prefix: 'chain-prefix', // Change to target chain's prefix
+   });
+   ```
+
+3. Rebuild contract if chain requires specific CosmWasm version:
+   - Update `Cargo.toml` dependencies to match target chain
+   - Recompile with `./build.sh`
+
+## Troubleshooting
+
+**Problem**: RPC errors during deployment or testing
+**Solution**: Try alternate RPC endpoint in `config.js`
+
+**Problem**: Out of gas errors
+**Solution**: Increase `GAS_ADJUSTMENT` in `config.js`
+
+**Problem**: Incorrect fee calculation
+**Solution**: Verify `GAS_PRICE` matches the chain's minimum gas price
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
