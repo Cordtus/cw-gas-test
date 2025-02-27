@@ -2,6 +2,7 @@
   "name": "babylon-gas-test-scripts",
   "version": "1.0.0",
   "type": "module",
+  "license": "MIT",
   "scripts": {
     "deploy": "node deploy.js",
     "test": "node test-gas.js",
@@ -11,8 +12,10 @@
     "@cosmjs/cosmwasm-stargate": "^0.33.0",
     "@cosmjs/proto-signing": "^0.33.0",
     "@cosmjs/stargate": "^0.33.0",
-    "canvas": "^2.11.2",
-    "d3": "^7.9.0",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "simple-statistics": "^7.8.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }

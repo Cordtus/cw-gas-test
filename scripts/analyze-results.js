@@ -1,6 +1,5 @@
 import * as fs from 'fs';
-import * as d3 from 'd3';
-import { createCanvas } from 'canvas';
+import { linearRegression } from 'simple-statistics';
 import { config } from './config.js';
 
 // Function to parse CSV
@@ -32,52 +31,35 @@ function extractNumericData(data) {
     return data.filter(row => {
         const lengthValue = row['Message Length'];
         return typeof lengthValue === 'number';
-    });
+    }).sort((a, b) => a['Message Length'] - b['Message Length']);
 }
 
-// Perform linear regression
-function linearRegression(data, xKey, yKey) {
-    const n = data.length;
+// Function to calculate regression
+function calculateRegression(numericData) {
+    // Prepare data for regression
+    const points = numericData.map(row => [row['Message Length'], row['Gas Used']]);
     
-    let sumX = 0;
-    let sumY = 0;
-    let sumXY = 0;
-    let sumXX = 0;
-    
-    for (const row of data) {
-        const x = row[xKey];
-        const y = row[yKey];
-        
-        sumX += x;
-        sumY += y;
-        sumXY += x * y;
-        sumXX += x * x;
-    }
-    
-    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / n;
+    // Calculate regression
+    const result = linearRegression(points);
     
     // Calculate R-squared
-    const meanY = sumY / n;
-    let totalSS = 0;
-    let residualSS = 0;
-    
-    for (const row of data) {
-        const x = row[xKey];
-        const y = row[yKey];
-        const prediction = intercept + slope * x;
-        
-        totalSS += (y - meanY) ** 2;
-        residualSS += (y - prediction) ** 2;
-    }
-    
+    const mean = points.reduce((sum, point) => sum + point[1], 0) / points.length;
+    const totalSS = points.reduce((sum, point) => sum + Math.pow(point[1] - mean, 2), 0);
+    const residualSS = points.reduce((sum, point) => {
+        const predicted = result.m * point[0] + result.b;
+        return sum + Math.pow(point[1] - predicted, 2);
+    }, 0);
     const rSquared = 1 - (residualSS / totalSS);
     
-    return { slope, intercept, rSquared };
+    return {
+        slope: result.m,
+        intercept: result.b,
+        r2: rSquared
+    };
 }
 
 // Main analysis function
-function analyzeGasResults() {
+async function analyzeGasResults() {
     try {
         console.log('Analyzing gas results...');
         
@@ -95,17 +77,18 @@ function analyzeGasResults() {
         const numericData = extractNumericData(data);
         console.log(`Found ${numericData.length} numeric data points for regression analysis`);
         
-        // Perform regression
-        const regression = linearRegression(numericData, 'Message Length', 'Gas Used');
+        // Calculate regression
+        const regression = calculateRegression(numericData);
         
         console.log('\nGas Regression Analysis:');
         console.log(`Base gas cost: ${regression.intercept.toFixed(2)} gas units`);
         console.log(`Marginal cost per byte: ${regression.slope.toFixed(2)} gas units`);
-        console.log(`R-squared: ${regression.rSquared.toFixed(4)}`);
+        console.log(`R-squared: ${regression.r2.toFixed(4)}`);
         
         // Calculate cost in BBN tokens
-        const baseCostBBN = (regression.intercept * 0.002) / 1000000;
-        const marginalCostBBN = (regression.slope * 0.002) / 1000000;
+        const gasPriceValue = 0.002 / 1000000; // 0.002ubbn in BBN
+        const baseCostBBN = regression.intercept * gasPriceValue;
+        const marginalCostBBN = regression.slope * gasPriceValue;
         
         console.log('\nCost Analysis:');
         console.log(`Base cost: ${baseCostBBN.toFixed(6)} BBN`);
@@ -117,9 +100,38 @@ function analyzeGasResults() {
         
         for (const size of sizes) {
             const gasEstimate = regression.intercept + regression.slope * size;
-            const costEstimate = (gasEstimate * 0.002) / 1000000;
+            const costEstimate = gasEstimate * gasPriceValue;
             console.log(`${size} bytes: ~${gasEstimate.toFixed(0)} gas (${costEstimate.toFixed(6)} BBN)`);
         }
+        
+        // Generate summary file
+        const summary = `# Babylon Gas Cost Analysis
+
+## Regression Analysis
+- Base gas cost: ${regression.intercept.toFixed(2)} gas units
+- Marginal cost per byte: ${regression.slope.toFixed(2)} gas units
+- R-squared: ${regression.r2.toFixed(4)}
+
+## Cost in BBN Tokens
+- Base cost: ${baseCostBBN.toFixed(6)} BBN
+- Marginal cost per byte: ${marginalCostBBN.toFixed(8)} BBN
+
+## Practical Estimates
+${sizes.map(size => {
+    const gasEstimate = regression.intercept + regression.slope * size;
+    const costEstimate = gasEstimate * gasPriceValue;
+    return `- ${size} bytes: ~${gasEstimate.toFixed(0)} gas (${costEstimate.toFixed(6)} BBN)`;
+}).join('\n')}
+
+## Formula
+Total Gas = ${regression.intercept.toFixed(2)} + ${regression.slope.toFixed(2)} × Message Size (bytes)
+Total Cost (BBN) = Total Gas × ${gasPriceValue}
+
+Analysis conducted on ${new Date().toISOString().split('T')[0]}
+`;
+
+        fs.writeFileSync('gas_analysis.md', summary);
+        console.log('Summary saved as gas_analysis.md');
         
         // Check for special format data
         const formatData = data.filter(row => {
