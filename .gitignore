@@ -1,11 +1,42 @@
-/target
-**/*.rs.bk
-Cargo.lock
-.cargo-ok
-artifacts/
+# ---------------------
+# Rust / CosmWasm
+# ---------------------
+/target/
+/artifacts/
 schema/
+
+# Optional: if you do not want to commit Cargo.lock
+# (Most apps commit it for reproducible builds; libraries often ignore it.)
+# Cargo.lock
+.cargo-ok
+
+# Backup or temporary Rust files
+**/*.rs.bk
+
+# ---------------------
+# Node.js / JS
+# ---------------------
+scripts/node_modules/
+node_modules/
+
+# Logs
 *.log
-gas_results.csv
-gas_analysis.png
+
+# ---------------------
+# Environment Files
+# ---------------------
 .env
-/scripts/node_modules/
+scripts/.env
+scripts/.env.*
+
+# ---------------------
+# IDE / Editor
+# ---------------------
+.vscode/
+.idea/
+
+# ---------------------
+# OS / Misc
+# ---------------------
+.DS_Store
+Thumbs.db
