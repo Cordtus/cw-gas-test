@@ -1,9 +1,9 @@
 [package]
-name = "babylon-gas-test"
+name = "cw-gas-test"
 version = "0.1.0"
 edition = "2021"
 authors = ["Your Name <your.email@example.com>"]
-description = "A contract for testing gas costs on Babylon blockchain"
+description = "A contract for testing gas costs on CosmWasm enabled blockchains"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

@@ -1,12 +1,12 @@
-# Babylon Gas Test
+# CosmWasm Gas Test
 
-A toolkit for measuring and analyzing gas costs for data storage on the Babylon blockchain. This repository contains a CosmWasm smart contract and automated testing tools to measure transaction costs for various message sizes and formats.
+A toolkit for measuring and analyzing gas costs for CosmWasm contract data storage. This repository contains a CosmWasm smart contract and automated testing tools to measure transaction costs for various message sizes and formats.
 
-For a detailed analysis of initial findings produced by this test, (with default parameters) see this [quick analysist](https://gist.github.com/Cordtus/8753d81f135055e06973894cb3455f05).
+For a detailed analysis of initial findings produced by this test on `babylong-testnet-5`, (with default parameters) see this [quick analysist](https://gist.github.com/Cordtus/8753d81f135055e06973894cb3455f05).
 
 ## Key Findings
 
-Storage costs on Babylon follow a linear model:
+Storage costs as tested follow a linear model:
 
 - Base cost: ~124,174 gas units (~0.000248 BBN)
 - Marginal cost: ~40.34 gas units per byte (~0.00000008 BBN)
@@ -15,7 +15,7 @@ Storage costs on Babylon follow a linear model:
 ## Project Structure
 
 ```sh
-babylon-gas-test/
+cw-gas-test/
 ├── src/                 # Rust contract code
 │   └── lib.rs           # Gas testing contract
 ├── artifacts/           # Compiled contract (after build)
@@ -39,14 +39,14 @@ babylon-gas-test/
 - Node.js (v18.0.0+)
 - Yarn
 - Docker (for contract optimization)
-- Access to Babylon testnet with test tokens
+- Fee tokens for the network being tested
 
 ### 1. Prepare the Environment
 
 ```bash
 # Clone the repository
-git clone https://github.com/Cordtus/babylon-gas-test.git
-cd babylon-gas-test
+git clone https://github.com/Cordtus/cw-gas-test.git
+cd cw-gas-test
 
 # Make build script executable
 chmod +x build.sh
@@ -107,10 +107,10 @@ Edit `config.js` to adjust test parameters:
 TEST_MESSAGE_LENGTHS: [1, 10, 50, 100, 200, 500, 1000, 2000],
 
 // Modify RPC endpoint
-RPC_ENDPOINT: 'https://babylon-testnet-rpc.nodes.guru',
+RPC_ENDPOINT: 'http://localhost:26657',
 
 // Change gas price
-GAS_PRICE: '0.002ubbn',
+GAS_PRICE: '0.002ustake',
 ```
 
 ## Running on Existing Contract
@@ -119,7 +119,7 @@ To test with an already deployed contract:
 
 ```bash
 # Add to .env
-CONTRACT_ADDRESS=bbn1...
+CONTRACT_ADDRESS=wallet1...
 
 # Run tests without redeployment
 yarn test
