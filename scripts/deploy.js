@@ -1,3 +1,5 @@
+// src/deploy.js
+
 import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
 import { SigningCosmWasmClient } from '@cosmjs/cosmwasm-stargate';
 import { GasPrice } from '@cosmjs/stargate';
@@ -7,32 +9,27 @@ import { config } from './config.js';
 
 dotenv.config();
 
-// Override config if env vars present
-const RPC_ENDPOINT = process.env.RPC_ENDPOINT || config.RPC_ENDPOINT;
-const CHAIN_ID = process.env.CHAIN_ID || config.CHAIN_ID;
-const GAS_PRICE = process.env.GAS_PRICE || config.GAS_PRICE;
-
 async function deployGasTestContract() {
     try {
         if (!process.env.MNEMONIC) {
             throw new Error('MNEMONIC environment variable is required');
         }
 
-        console.log(`Deploying Gas Test Contract to ${CHAIN_ID} via ${RPC_ENDPOINT}`);
+        console.log(`Deploying Contract to ${config.CHAIN_ID} via ${config.RPC_ENDPOINT}`);
 
         // Generate wallet from mnemonic
         const wallet = await DirectSecp256k1HdWallet.fromMnemonic(process.env.MNEMONIC, {
-            prefix: 'bbn',
+            prefix: config.ADDRESS_PREFIX,
         });
         const [firstAccount] = await wallet.getAccounts();
         console.log('Deploying from address:', firstAccount.address);
 
         // Create signing client
         const client = await SigningCosmWasmClient.connectWithSigner(
-            RPC_ENDPOINT,
+            config.RPC_ENDPOINT,
             wallet,
             {
-                gasPrice: GasPrice.fromString(GAS_PRICE),
+                gasPrice: GasPrice.fromString(config.GAS_PRICE),
             }
         );
 
@@ -76,7 +73,7 @@ async function deployGasTestContract() {
 }
 
 // Run if executed directly
-if (import.meta.url === import.meta.main) {
+if (import.meta.url.endsWith('deploy.js')) {
     deployGasTestContract();
 }
 

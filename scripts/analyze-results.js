@@ -1,6 +1,14 @@
+// analyze-results.js
+
 import * as fs from 'fs';
 import { linearRegression } from 'simple-statistics';
 import { config } from './config.js';
+
+const tokenName = config.TOKEN_NAME;
+const tokenDenom = config.TOKEN_DENOM;
+
+// parse gas price for fee calculation
+const gasPrice = parseFloat(config.GAS_PRICE.replace(/[^0-9.]/g, ''));
 
 // Function to parse CSV
 function parseCSV(filePath) {
@@ -58,6 +66,11 @@ function calculateRegression(numericData) {
     };
 }
 
+// fee in micro-units
+function calculateFee(gasUnits) {
+    return (gasUnits * gasPrice).toFixed(6);
+}
+
 // Main analysis function
 async function analyzeGasResults() {
     try {
@@ -85,14 +98,13 @@ async function analyzeGasResults() {
         console.log(`Marginal cost per byte: ${regression.slope.toFixed(2)} gas units`);
         console.log(`R-squared: ${regression.r2.toFixed(4)}`);
         
-        // Calculate cost in BBN tokens
-        const gasPriceValue = 0.002 / 1000000; // 0.002ubbn in BBN
-        const baseCostBBN = regression.intercept * gasPriceValue;
-        const marginalCostBBN = regression.slope * gasPriceValue;
+        // cost in native tokens
+        const baseCostToken = calculateFee(regression.intercept);
+        const marginalCostToken = calculateFee(regression.slope);
         
         console.log('\nCost Analysis:');
-        console.log(`Base cost: ${baseCostBBN.toFixed(6)} BBN`);
-        console.log(`Marginal cost per byte: ${marginalCostBBN.toFixed(8)} BBN`);
+        console.log(`Base cost: ${baseCostToken} ${tokenDenom}`);
+        console.log(`Marginal cost per byte: ${marginalCostToken} ${tokenDenom}`);
         
         // Provide some practical estimates
         console.log('\nPractical Estimates:');
@@ -100,32 +112,36 @@ async function analyzeGasResults() {
         
         for (const size of sizes) {
             const gasEstimate = regression.intercept + regression.slope * size;
-            const costEstimate = gasEstimate * gasPriceValue;
-            console.log(`${size} bytes: ~${gasEstimate.toFixed(0)} gas (${costEstimate.toFixed(6)} BBN)`);
+            const costEstimate = calculateFee(gasEstimate);
+            console.log(`${size} bytes: ~${gasEstimate.toFixed(0)} gas (${costEstimate} ${tokenDenom})`);
         }
         
         // Generate summary file
-        const summary = `# Babylon Gas Cost Analysis
+        const summary = `# CosmWasm Gas Cost Analysis
+
+## Chain Details
+- Chain ID: ${config.CHAIN_ID}
+- Gas Price: ${config.GAS_PRICE}
 
 ## Regression Analysis
 - Base gas cost: ${regression.intercept.toFixed(2)} gas units
 - Marginal cost per byte: ${regression.slope.toFixed(2)} gas units
 - R-squared: ${regression.r2.toFixed(4)}
 
-## Cost in BBN Tokens
-- Base cost: ${baseCostBBN.toFixed(6)} BBN
-- Marginal cost per byte: ${marginalCostBBN.toFixed(8)} BBN
+## Cost in ${tokenName} (${tokenDenom})
+- Base cost: ${baseCostToken} ${tokenDenom}
+- Marginal cost per byte: ${marginalCostToken} ${tokenDenom}
 
 ## Practical Estimates
 ${sizes.map(size => {
     const gasEstimate = regression.intercept + regression.slope * size;
-    const costEstimate = gasEstimate * gasPriceValue;
-    return `- ${size} bytes: ~${gasEstimate.toFixed(0)} gas (${costEstimate.toFixed(6)} BBN)`;
+    const costEstimate = calculateFee(gasEstimate);
+    return `- ${size} bytes: ~${gasEstimate.toFixed(0)} gas (${costEstimate} ${tokenDenom})`;
 }).join('\n')}
 
 ## Formula
 Total Gas = ${regression.intercept.toFixed(2)} + ${regression.slope.toFixed(2)} × Message Size (bytes)
-Total Cost (BBN) = Total Gas × ${gasPriceValue}
+Total Cost = Total Gas × ${gasPrice} ${tokenDenom}/gas unit
 
 Analysis conducted on ${new Date().toISOString().split('T')[0]}
 `;
@@ -142,7 +158,8 @@ Analysis conducted on ${new Date().toISOString().split('T')[0]}
         if (formatData.length > 0) {
             console.log('\nSpecial Format Analysis:');
             for (const row of formatData) {
-                console.log(`${row['Message Length']}: ${row['Gas Used']} gas (${row['Cost (BBN)']} BBN)`);
+                const costColumn = `Cost (${tokenDenom})`;
+                console.log(`${row['Message Length']}: ${row['Gas Used']} gas (${row[costColumn]} ${tokenDenom})`);
             }
         }
         
@@ -155,7 +172,8 @@ Analysis conducted on ${new Date().toISOString().split('T')[0]}
         if (charData.length > 0) {
             console.log('\nCharacter Analysis:');
             for (const row of charData) {
-                console.log(`${row['Message Length']}: ${row['Gas Used']} gas (${row['Cost (BBN)']} BBN)`);
+                const costColumn = `Cost (${tokenDenom})`;
+                console.log(`${row['Message Length']}: ${row['Gas Used']} gas (${row[costColumn]} ${tokenDenom})`);
             }
         }
         

@@ -34,7 +34,7 @@ if not numeric_rows.empty:
     plt.scatter(numeric_rows['Message Length'], numeric_rows['Gas Used'], alpha=0.7)
     plt.plot(x_pred, y_pred, 'r--', label=f'y = {intercept:.2f} + {slope:.2f}x (R² = {r_value**2:.4f})')
     
-    plt.title('Babylon Gas Usage vs Message Length')
+    plt.title('Gas Usage vs Message Length')
     plt.xlabel('Message Length (bytes)')
     plt.ylabel('Gas Used')
     plt.legend()

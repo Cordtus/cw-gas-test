@@ -4,7 +4,7 @@ set -e
 # Builds the contract in release mode using rust-optimizer
 # Requires Docker to be installed
 
-echo "Building babylon-gas-test contract..."
+echo "Building gas-test contract..."
 docker run --rm -v "$(pwd)":/code \
   --mount type=volume,source="$(basename "$(pwd)")_cache",target=/code/target \
   --mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
