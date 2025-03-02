@@ -1,6 +1,20 @@
+// analyze-results.js
+
 import * as fs from 'fs';
 import { linearRegression } from 'simple-statistics';
 import { config } from './config.js';
+import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
+import { SigningCosmWasmClient } from '@cosmjs/cosmwasm-stargate';
+import { GasPrice } from '@cosmjs/stargate';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+const tokenName = config.TOKEN_NAME;
+const tokenDenom = config.TOKEN_DENOM;
+
+// parse gas price for fee calculation
+const gasPrice = parseFloat(config.GAS_PRICE.replace(/[^0-9.]/g, ''));
 
 // Function to parse CSV
 function parseCSV(filePath) {
@@ -58,7 +72,60 @@ function calculateRegression(numericData) {
     };
 }
 
-// Main analysis function
+// fee in micro-units
+function calculateFee(gasUnits) {
+    return (gasUnits * gasPrice).toFixed(6);
+}
+
+// Create query client
+async function createClient() {
+    try {
+        // Skip if no contract address is provided
+        if (!config.CONTRACT_ADDRESS) {
+            return null;
+        }
+        
+        // Check if mnemonic is available
+        if (!process.env.MNEMONIC) {
+            console.log('No mnemonic in .env - skipping on-chain analysis');
+            return null;
+        }
+        
+        // Generate wallet from mnemonic
+        const wallet = await DirectSecp256k1HdWallet.fromMnemonic(process.env.MNEMONIC, {
+            prefix: config.ADDRESS_PREFIX,
+        });
+        
+        // Create client
+        const client = await SigningCosmWasmClient.connectWithSigner(
+            config.RPC_ENDPOINT,
+            wallet,
+            {
+                gasPrice: GasPrice.fromString(config.GAS_PRICE),
+            }
+        );
+        
+        return client;
+    } catch (error) {
+        console.error('Error creating client:', error.message);
+        return null;
+    }
+}
+
+// Query on-chain gas summary
+async function queryContractSummary(client) {
+    try {
+        if (!client) return null;
+        
+        const summary = await client.queryContractSmart(config.CONTRACT_ADDRESS, { get_gas_summary: {} });
+        return summary;
+    } catch (error) {
+        console.error('Error querying contract:', error.message);
+        return null;
+    }
+}
+
+// Analyze
 async function analyzeGasResults() {
     try {
         console.log('Analyzing gas results...');
@@ -85,14 +152,17 @@ async function analyzeGasResults() {
         console.log(`Marginal cost per byte: ${regression.slope.toFixed(2)} gas units`);
         console.log(`R-squared: ${regression.r2.toFixed(4)}`);
         
-        // Calculate cost in BBN tokens
-        const gasPriceValue = 0.002 / 1000000; // 0.002ubbn in BBN
-        const baseCostBBN = regression.intercept * gasPriceValue;
-        const marginalCostBBN = regression.slope * gasPriceValue;
+        // cost in native tokens
+        const baseCostToken = calculateFee(regression.intercept);
+        const marginalCostToken = calculateFee(regression.slope);
         
         console.log('\nCost Analysis:');
-        console.log(`Base cost: ${baseCostBBN.toFixed(6)} BBN`);
-        console.log(`Marginal cost per byte: ${marginalCostBBN.toFixed(8)} BBN`);
+        console.log(`Base cost: ${baseCostToken} ${tokenDenom}`);
+        console.log(`Marginal cost per byte: ${marginalCostToken} ${tokenDenom}`);
+        
+        // Query chain data
+        const client = await createClient();
+        const onChainSummary = await queryContractSummary(client);
         
         // Provide some practical estimates
         console.log('\nPractical Estimates:');
@@ -100,35 +170,51 @@ async function analyzeGasResults() {
         
         for (const size of sizes) {
             const gasEstimate = regression.intercept + regression.slope * size;
-            const costEstimate = gasEstimate * gasPriceValue;
-            console.log(`${size} bytes: ~${gasEstimate.toFixed(0)} gas (${costEstimate.toFixed(6)} BBN)`);
+            const costEstimate = calculateFee(gasEstimate);
+            console.log(`${size} bytes: ~${gasEstimate.toFixed(0)} gas (${costEstimate} ${tokenDenom})`);
         }
         
         // Generate summary file
-        const summary = `# Babylon Gas Cost Analysis
+        let summary = `# CW Gas Cost Analysis
+
+## Chain Details
+- Chain ID: ${config.CHAIN_ID}
+- Gas Price: ${config.GAS_PRICE}
 
 ## Regression Analysis
 - Base gas cost: ${regression.intercept.toFixed(2)} gas units
 - Marginal cost per byte: ${regression.slope.toFixed(2)} gas units
 - R-squared: ${regression.r2.toFixed(4)}
 
-## Cost in BBN Tokens
-- Base cost: ${baseCostBBN.toFixed(6)} BBN
-- Marginal cost per byte: ${marginalCostBBN.toFixed(8)} BBN
+## Cost in ${tokenName} (${tokenDenom})
+- Base cost: ${baseCostToken} ${tokenDenom}
+- Marginal cost per byte: ${marginalCostToken} ${tokenDenom}
 
 ## Practical Estimates
 ${sizes.map(size => {
     const gasEstimate = regression.intercept + regression.slope * size;
-    const costEstimate = gasEstimate * gasPriceValue;
-    return `- ${size} bytes: ~${gasEstimate.toFixed(0)} gas (${costEstimate.toFixed(6)} BBN)`;
+    const costEstimate = calculateFee(gasEstimate);
+    return `- ${size} bytes: ~${gasEstimate.toFixed(0)} gas (${costEstimate} ${tokenDenom})`;
 }).join('\n')}
 
 ## Formula
 Total Gas = ${regression.intercept.toFixed(2)} + ${regression.slope.toFixed(2)} × Message Size (bytes)
-Total Cost (BBN) = Total Gas × ${gasPriceValue}
-
-Analysis conducted on ${new Date().toISOString().split('T')[0]}
+Total Cost = Total Gas × ${gasPrice} ${tokenDenom}/gas unit
 `;
+
+        // Add on-chain data [if exists]
+        if (onChainSummary) {
+            summary += `
+## On-Chain Gas Summary
+- Total Messages: ${onChainSummary.msg_count}
+- Total Gas Used: ${onChainSummary.total_gas}
+- Average Gas Per Message: ${onChainSummary.avg_gas}
+- Total Bytes Processed: ${onChainSummary.total_bytes}
+- Average Gas Per Byte: ${onChainSummary.gas_per_byte}
+`;
+        }
+
+        summary += `\nAnalysis conducted on ${new Date().toISOString().split('T')[0]}`;
 
         fs.writeFileSync('gas_analysis.md', summary);
         console.log('Summary saved as gas_analysis.md');
@@ -142,7 +228,8 @@ Analysis conducted on ${new Date().toISOString().split('T')[0]}
         if (formatData.length > 0) {
             console.log('\nSpecial Format Analysis:');
             for (const row of formatData) {
-                console.log(`${row['Message Length']}: ${row['Gas Used']} gas (${row['Cost (BBN)']} BBN)`);
+                const costColumn = `Cost (${tokenDenom})`;
+                console.log(`${row['Message Length']}: ${row['Gas Used']} gas (${row[costColumn]} ${tokenDenom})`);
             }
         }
         
@@ -155,7 +242,8 @@ Analysis conducted on ${new Date().toISOString().split('T')[0]}
         if (charData.length > 0) {
             console.log('\nCharacter Analysis:');
             for (const row of charData) {
-                console.log(`${row['Message Length']}: ${row['Gas Used']} gas (${row['Cost (BBN)']} BBN)`);
+                const costColumn = `Cost (${tokenDenom})`;
+                console.log(`${row['Message Length']}: ${row['Gas Used']} gas (${row[costColumn]} ${tokenDenom})`);
             }
         }
         

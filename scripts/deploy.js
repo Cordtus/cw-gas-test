@@ -1,3 +1,5 @@
+// src/deploy.js
+
 import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
 import { SigningCosmWasmClient } from '@cosmjs/cosmwasm-stargate';
 import { GasPrice } from '@cosmjs/stargate';
@@ -7,10 +9,74 @@ import { config } from './config.js';
 
 dotenv.config();
 
-// Override config if env vars present
-const RPC_ENDPOINT = process.env.RPC_ENDPOINT || config.RPC_ENDPOINT;
-const CHAIN_ID = process.env.CHAIN_ID || config.CHAIN_ID;
-const GAS_PRICE = process.env.GAS_PRICE || config.GAS_PRICE;
+// If new contract is instantiated, adds address to config.js for subsequent test functions
+function storeAddress(contractAddress) {
+    try {
+        const configPath = './config.js';
+        let configContent = fs.readFileSync(configPath, 'utf8');
+        
+        // Replace the CONTRACT_ADDRESS value with the new contract address
+        configContent = configContent.replace(
+            /CONTRACT_ADDRESS: ['"].*['"]/,
+            `CONTRACT_ADDRESS: '${contractAddress}'`
+        );
+        
+        fs.writeFileSync(configPath, configContent);
+        console.log(`Config.js updated with contract address: ${contractAddress}`);
+        
+        // Optionally update deployments.json
+        updateDeploymentJson(contractAddress);
+        
+        return true;
+    } catch (error) {
+        console.error('Error updating config.js:', error);
+        return false;
+    }
+}
+
+// Add contract to deployments.json by chain_id
+function updateDeploymentJson(contractAddress) {
+    try {
+        const deploymentsPath = './deployments.json';
+        let deploymentsContent = {};
+        
+        // Read file if exists
+        if (fs.existsSync(deploymentsPath)) {
+            deploymentsContent = JSON.parse(fs.readFileSync(deploymentsPath, 'utf8'));
+        }
+        
+        // Ensure deployments array exists
+        if (!deploymentsContent.deployments) {
+            deploymentsContent.deployments = [];
+        }
+        
+        // Check if chain_id exists
+        const chainExists = deploymentsContent.deployments.some(
+            deployment => Object.keys(deployment)[0] === config.CHAIN_ID
+        );
+        
+        if (chainExists) {
+            // Update existing entry if exists
+            deploymentsContent.deployments = deploymentsContent.deployments.map(deployment => {
+                if (Object.keys(deployment)[0] === config.CHAIN_ID) {
+                    return { [config.CHAIN_ID]: contractAddress };
+                }
+                return deployment;
+            });
+        } else {
+            // Add new entry if not exists
+            deploymentsContent.deployments.push({ [config.CHAIN_ID]: contractAddress });
+        }
+        
+        fs.writeFileSync(deploymentsPath, JSON.stringify(deploymentsContent, null, 2));
+        console.log(`Deployments.json updated with contract address for chain ${config.CHAIN_ID}`);
+        
+        return true;
+    } catch (error) {
+        console.error('Error updating deployments.json:', error);
+        return false;
+    }
+}
 
 async function deployGasTestContract() {
     try {
@@ -18,21 +84,21 @@ async function deployGasTestContract() {
             throw new Error('MNEMONIC environment variable is required');
         }
 
-        console.log(`Deploying Gas Test Contract to ${CHAIN_ID} via ${RPC_ENDPOINT}`);
+        console.log(`Deploying Contract to ${config.CHAIN_ID} via ${config.RPC_ENDPOINT}`);
 
-        // Generate wallet from mnemonic
+        // Generate wallet
         const wallet = await DirectSecp256k1HdWallet.fromMnemonic(process.env.MNEMONIC, {
-            prefix: 'bbn',
+            prefix: config.ADDRESS_PREFIX,
         });
         const [firstAccount] = await wallet.getAccounts();
         console.log('Deploying from address:', firstAccount.address);
 
-        // Create signing client
+        // Create signer
         const client = await SigningCosmWasmClient.connectWithSigner(
-            RPC_ENDPOINT,
+            config.RPC_ENDPOINT,
             wallet,
             {
-                gasPrice: GasPrice.fromString(GAS_PRICE),
+                gasPrice: GasPrice.fromString(config.GAS_PRICE),
             }
         );
 
@@ -46,12 +112,9 @@ async function deployGasTestContract() {
         );
         console.log('Upload result:', uploadResult);
 
-        // Instantiate contract
+        // Instantiate contract - empty instantiate message
         console.log('Instantiating contract...');
-        const instantiateMsg = {
-            btc_timestamp_enabled: false,
-            babylon_contract: null
-        };
+        const instantiateMsg = {};
 
         const instantiateResult = await client.instantiate(
             firstAccount.address,
@@ -61,6 +124,12 @@ async function deployGasTestContract() {
             'auto'
         );
         console.log('Contract address:', instantiateResult.contractAddress);
+        
+        // Update config.js with the new contract address
+        const updated = storeAddress(instantiateResult.contractAddress);
+        if (!updated) {
+            console.error('Failed to write contract address to config file. Check file permissions.');
+        }
         
         // Return contract info for further operations
         return {
@@ -76,7 +145,7 @@ async function deployGasTestContract() {
 }
 
 // Run if executed directly
-if (import.meta.url === import.meta.main) {
+if (import.meta.url.endsWith('deploy.js')) {
     deployGasTestContract();
 }
 

@@ -1,8 +1,8 @@
 [package]
 name = "cw-gas-test"
-version = "0.1.0"
+version = "0.2.1"
 edition = "2021"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["Cordt Hanson cordtus@gmail.com"]
 description = "A contract for testing gas costs on CosmWasm enabled blockchains"
 
 [lib]
