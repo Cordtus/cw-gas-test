@@ -3,6 +3,12 @@
 import * as fs from 'fs';
 import { linearRegression } from 'simple-statistics';
 import { config } from './config.js';
+import { DirectSecp256k1HdWallet } from '@cosmjs/proto-signing';
+import { SigningCosmWasmClient } from '@cosmjs/cosmwasm-stargate';
+import { GasPrice } from '@cosmjs/stargate';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const tokenName = config.TOKEN_NAME;
 const tokenDenom = config.TOKEN_DENOM;
@@ -71,7 +77,55 @@ function calculateFee(gasUnits) {
     return (gasUnits * gasPrice).toFixed(6);
 }
 
-// Main analysis function
+// Create query client
+async function createClient() {
+    try {
+        // Skip if no contract address is provided
+        if (!config.CONTRACT_ADDRESS) {
+            return null;
+        }
+        
+        // Check if mnemonic is available
+        if (!process.env.MNEMONIC) {
+            console.log('No mnemonic in .env - skipping on-chain analysis');
+            return null;
+        }
+        
+        // Generate wallet from mnemonic
+        const wallet = await DirectSecp256k1HdWallet.fromMnemonic(process.env.MNEMONIC, {
+            prefix: config.ADDRESS_PREFIX,
+        });
+        
+        // Create client
+        const client = await SigningCosmWasmClient.connectWithSigner(
+            config.RPC_ENDPOINT,
+            wallet,
+            {
+                gasPrice: GasPrice.fromString(config.GAS_PRICE),
+            }
+        );
+        
+        return client;
+    } catch (error) {
+        console.error('Error creating client:', error.message);
+        return null;
+    }
+}
+
+// Query on-chain gas summary
+async function queryContractSummary(client) {
+    try {
+        if (!client) return null;
+        
+        const summary = await client.queryContractSmart(config.CONTRACT_ADDRESS, { get_gas_summary: {} });
+        return summary;
+    } catch (error) {
+        console.error('Error querying contract:', error.message);
+        return null;
+    }
+}
+
+// Analyze
 async function analyzeGasResults() {
     try {
         console.log('Analyzing gas results...');
@@ -106,6 +160,10 @@ async function analyzeGasResults() {
         console.log(`Base cost: ${baseCostToken} ${tokenDenom}`);
         console.log(`Marginal cost per byte: ${marginalCostToken} ${tokenDenom}`);
         
+        // Query chain data
+        const client = await createClient();
+        const onChainSummary = await queryContractSummary(client);
+        
         // Provide some practical estimates
         console.log('\nPractical Estimates:');
         const sizes = [10, 100, 1000, 10000];
@@ -117,7 +175,7 @@ async function analyzeGasResults() {
         }
         
         // Generate summary file
-        const summary = `# CosmWasm Gas Cost Analysis
+        let summary = `# CW Gas Cost Analysis
 
 ## Chain Details
 - Chain ID: ${config.CHAIN_ID}
@@ -142,9 +200,21 @@ ${sizes.map(size => {
 ## Formula
 Total Gas = ${regression.intercept.toFixed(2)} + ${regression.slope.toFixed(2)} × Message Size (bytes)
 Total Cost = Total Gas × ${gasPrice} ${tokenDenom}/gas unit
-
-Analysis conducted on ${new Date().toISOString().split('T')[0]}
 `;
+
+        // Add on-chain data [if exists]
+        if (onChainSummary) {
+            summary += `
+## On-Chain Gas Summary
+- Total Messages: ${onChainSummary.msg_count}
+- Total Gas Used: ${onChainSummary.total_gas}
+- Average Gas Per Message: ${onChainSummary.avg_gas}
+- Total Bytes Processed: ${onChainSummary.total_bytes}
+- Average Gas Per Byte: ${onChainSummary.gas_per_byte}
+`;
+        }
+
+        summary += `\nAnalysis conducted on ${new Date().toISOString().split('T')[0]}`;
 
         fs.writeFileSync('gas_analysis.md', summary);
         console.log('Summary saved as gas_analysis.md');

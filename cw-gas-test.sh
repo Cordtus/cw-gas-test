@@ -113,7 +113,29 @@ fi
 echo -e "\n${GREEN}Step: Installing/Checking Node.js dependencies...${NC}"
 if [ ! -d "$SCRIPTS_DIR/node_modules" ]; then
   echo -e "${YELLOW}No node_modules in $SCRIPTS_DIR. Installing now...${NC}"
-  (cd "$SCRIPTS_DIR" && [ -f yarn.lock ] && yarn install || npm install)
+  (cd "$SCRIPTS_DIR" && if [ -f yarn.lock ]; then 
+    echo "Using yarn to install dependencies..."
+    yarn install
+  elif [ -f package-lock.json ]; then
+    echo "Using npm to install dependencies..."
+    npm install
+  else
+    # No lock files exist yet, check if npm or yarn is preferred
+    if command -v yarn &> /dev/null; then
+      echo "No lock file found. Using yarn as the package manager..."
+      yarn install
+    else
+      echo "No lock file found. Using npm as the package manager..."
+      npm install
+    fi
+  fi)
+  
+  if [ ! -d "$SCRIPTS_DIR/node_modules" ]; then
+    echo -e "${RED}ERROR: Failed to install Node.js dependencies. Check package.json and connection.${NC}"
+    exit 1
+  else
+    echo -e "${GREEN}Successfully installed Node.js dependencies.${NC}"
+  fi
 else
   echo -e "${GREEN}Node.js dependencies already installed in $SCRIPTS_DIR${NC}"
 fi
