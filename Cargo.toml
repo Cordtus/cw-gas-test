@@ -1,6 +1,6 @@
 [package]
 name = "cw-gas-test"
-version = "0.1.1"
+version = "0.2.1"
 edition = "2021"
 authors = ["Cordt Hanson cordtus@gmail.com"]
 description = "A contract for testing gas costs on CosmWasm enabled blockchains"
