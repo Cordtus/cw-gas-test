@@ -1,7 +1,16 @@
 {
   "deployments": [
-    {"juno-1": "placeholder"},
-    {"gaia-1": "cosmos1examplecontractaddressforthecosmoshub1testingchain"},
-    {"babylon-test-5": "bbn1zgr6df40fxmjpct245qz2jghjwcmehxlrsmwlnxm0wlwfw2kj60su0y05t"}
+    {
+      "juno-1": "placeholder"
+    },
+    {
+      "gaia-1": "cosmos1examplecontractaddressforthecosmoshub1testingchain"
+    },
+    {
+      "babylon-test-5": "bbn1zgr6df40fxmjpct245qz2jghjwcmehxlrsmwlnxm0wlwfw2kj60su0y05t"
+    },
+    {
+      "atlantic-2": "sei1hds6ucyf4n63f0d4gz5tf693ktr6gg7z0k6dlpfaat6l8acsta0ss94ytk"
+    }
   ]
 }

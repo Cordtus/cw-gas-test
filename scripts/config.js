@@ -18,7 +18,7 @@ export const config = {
   // Contract settings
   CONTRACT_LABEL: 'gas_test_contract',
   WASM_PATH: '../artifacts/cw_gas_test.wasm',
-  CONTRACT_ADDRESS: '',     // Optional: reuse existing contract [check ./deployments.json]
+  CONTRACT_ADDRESS: 'sei1hds6ucyf4n63f0d4gz5tf693ktr6gg7z0k6dlpfaat6l8acsta0ss94ytk',     // Optional: reuse existing contract [check ./deployments.json]
 
   // Test configuration
   TEST_MESSAGE_LENGTHS: [1, 10, 50, 100, 200, 500, 1000, 2000],
