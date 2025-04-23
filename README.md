@@ -1,27 +1,48 @@
 # CW Gas Test
 
-A toolkit for measuring and analyzing gas costs associated with contract execution and data storage on CosmWasm-enabled blockchains.  
-This repository contains a complete working CosmWasm smart contract, along with scripts for automated deployment and testing.
+A toolkit for measuring gas costs in CosmWasm smart contracts. This repository provides a contract and automation scripts for deployment, testing, and analysis.
 
-It is a working and tested demonstration of a moderate to complex CosmWasm contract project that serves a unique and overall not very practical purpose, with a heavy focus on hitting as many development processes as possible, and clearly documenting the overall process.
+## Purpose
 
-The tool itself provides a rough but realistic idea of the cost involved with handling smart contract messages and storage on a given chain. The testing is very simple but covers a variety of message sizes formats and character-types. Test results are saved locally in CSV, and stored on-chain.
-It can also be quickly deployed on many chains with as little modification as possible, dependent on the specific `wasmd` version the target chain houses.
+CW Gas Test demonstrates:
+- CosmWasm contract development workflows
+- Cross-chain deployment and testing
+- Gas cost analysis methods
 
-The main intent of this project is to serve as a learning tool, both for myself and for any developers who may be proficient in the various languages, but fairly new to the ecosystem overall. Going through the overall process should provide a solid baseline on how to work with Cosmos SDK in general.
+The project measures gas consumption across different message sizes, formats, and character types. Results are stored in CSV format locally and on-chain.
 
-*An example result (using default parameters on Babylon testnet) is published in this [analysis report](https://gist.github.com/Cordtus/8753d81f135055e06973894cb3455f05).*
+Example results are available in this [analysis report](https://gist.github.com/Cordtus/8753d81f135055e06973894cb3455f05).
+
+## Prerequisites
+
+- Rust (beginner to intermediate)
+- JavaScript/Node.js
+- Basic blockchain concepts
+- Basic Cosmos SDK knowledge (helpful)
+
+---
+
+## Workflow
+
+```mermaid
+graph TD
+    A[Build Contract] --> B[Deploy Contract]
+    B --> C[Run Gas Tests]
+    C --> D[Store Results On-Chain]
+    D --> E[Analyze Results]
+    E --> F[Generate Visualizations]
+```
 
 ---
 
 ## Features
 
-- **Automated Gas Testing**: Test gas consumption for various message sizes, formats, and character types
-- **On-Chain Storage**: Results are stored in the contract itself providing persistence and verifiability
-- **Analytics**: Generate statistical analysis with regression models to predict costs
-- **Transaction Proofs**: Store transaction hashes as proof of testing
-- **Fully Automated Workflow**: From contract deployment to analysis with minimal configuration
-- **Multi-Chain Support**: Configurable for any CosmWasm-enabled blockchain
+- Gas testing for message sizes, formats, and character types
+- On-chain storage of test results
+- Statistical regression analysis
+- Transaction hash storage as proof
+- Automated deployment to testing workflow
+- Multi-chain configuration options
 
 ---
 
@@ -61,9 +82,8 @@ cw-gas-test/
 6. **`jq`** (for JSON parsing in scripts)
 7. **Python** (optional, for extra visualization)
 
----
-
-### 1. Clone & Initial Prep
+<details>
+<summary><b>1. Clone & Initial Prep</b> (Click to expand)</summary>
 
 ```bash
 git clone https://github.com/Cordtus/cw-gas-test.git
@@ -72,10 +92,10 @@ cd cw-gas-test
 # Make the scripts executable
 chmod +x build.sh cw-gas-test.sh
 ```
+</details>
 
----
-
-### 2. Configure Your Chain Settings
+<details>
+<summary><b>2. Configure Your Chain Settings</b> (Click to expand)</summary>
 
 Network settings and other variables must be set in `scripts/config.js`.
 Example:
@@ -120,10 +140,10 @@ export const config = {
 
 - **`CONTRACT_ADDRESS`** is optional. Leave it blank to trigger **new deployment** (unless one is found in `deployments.json`).  
 - If you already have a contract deployed, you can put its address here (or ideally, add it to `deployments.json` and make a PR).
+</details>
 
----
-
-### 3. Provide Your Mnemonic in `.env`
+<details>
+<summary><b>3. Provide Your Mnemonic in `.env`</b> (Click to expand)</summary>
 
 - **`.env`** (located in `scripts/`) should contain **only** your wallet mnemonic.  
 - Example:
@@ -144,10 +164,10 @@ cp .env.template .env
 ```
 
 **Please make a NEW wallet to use here. In any case, make sure the file is either in your `.gitignore`, or that you do not commit the changes to a public repo.**
+</details>
 
----
-
-### 4. Option A: Manually Build & Run Steps
+<details>
+<summary><b>4. Option A: Manually Build & Run Steps</b> (Click to expand)</summary>
 
 If you only want to **build** the contract artifacts:
 
@@ -172,10 +192,10 @@ This will:
 - Deploy (if `CONTRACT_ADDRESS` is empty) or reuse an existing contract.
 - Run gas tests [varied message sizes, formats, character types.]
 - Generate a report in CSV.
+</details>
 
----
-
-### 4. Option B: Full Combined Workflow
+<details>
+<summary><b>4. Option B: Full Combined Workflow</b> (Click to expand)</summary>
 
 A single script, `cw-gas-test.sh`, merges all setup and execution into one pass:
 
@@ -197,6 +217,47 @@ When complete, you'll see:
 - **`gas_results.csv`** – Raw test data
 - **`gas_analysis.md`** – High-level summary with regression analysis  
 - **`gas_analysis.png`** – (If using Python) Visualization of the results
+</details>
+
+## Sample Output
+
+Results in `gas_results.csv`:
+
+| Message Length | Gas Used | Cost (usei) |
+|----------------|----------|-------------|
+| 1              | 129298   | 2585.96     |
+| 10             | 129671   | 2593.41     |
+| 50             | 131333   | 2626.66     |
+| 100            | 133394   | 2667.88     |
+| 200            | 141530   | 2830.60     |
+| 500            | 149664   | 2993.28     |
+| 1000           | 170624   | 3412.48     |
+| 2000           | 212585   | 4251.70     |
+
+Regression analysis output:
+
+```
+## Regression Analysis
+- Base gas cost: 129256.99 gas units
+- Marginal cost per byte: 41.37 gas units
+- R-squared: 1.0000
+
+## Formula
+Total Gas = 129256.99 + 41.37 × Message Size (bytes)
+Total Cost = Total Gas × 0.02 usei/gas unit
+```
+
+---
+
+## Result Interpretation
+
+Key metrics:
+
+1. **Base Gas Cost**: Fixed transaction cost (y-intercept)
+2. **Marginal Gas Cost**: Cost per additional byte (slope)
+3. **Format Efficiency**: Comparison between data formats
+
+The formula `Gas = 129256.99 + 41.37 × MessageSize` indicates a base cost of ~129,257 gas plus ~41.37 gas per byte.
 
 ---
 
@@ -263,17 +324,61 @@ If you already have a contract deployed:
 
 ---
 
-## Regression Analysis
+## Extension Projects
 
-The project performs linear regression on gas costs to model:
-
-```ini
-Total Gas = Base Cost + (Marginal Cost × Message Size)
-```
+Potential enhancements:
+- Batch transaction benchmarking
+- Complex storage pattern testing
+- Web-based visualization dashboard
+- Cross-chain comparison framework
+- CosmWasm memory operation benchmarks
 
 ---
 
-## Adapting for Other Chains
+## Troubleshooting
+
+<details>
+<summary><b>RPC Errors</b></summary>
+
+- Try alternate RPC endpoints in `config.js`
+- Adjust `REQUEST_DELAY` and `TX_CONFIRMATION_TIMEOUT` values
+- Verify endpoint supports required query methods
+</details>
+
+<details>
+<summary><b>Out of Gas Errors</b></summary>
+
+- Increase `GAS_ADJUSTMENT` or `GAS_PRICE` in `config.js`
+- Reduce test message sizes for chains with stricter limits
+- Check chain-specific gas configuration
+</details>
+
+<details>
+<summary><b>Deployment Failures</b></summary>
+
+- Ensure wallet has sufficient tokens for fees
+- Check transaction logs in block explorer
+- Verify contract compatibility with chain's CosmWasm version
+- Check for chain-specific code size limitations
+</details>
+
+<details>
+<summary><b>Permission Issues</b></summary>
+
+- Run `chmod +x <script>` for execution permission
+- Verify Docker daemon permissions
+</details>
+
+<details>
+<summary><b>Transaction Timeouts</b></summary>
+
+- Increase `TX_CONFIRMATION_TIMEOUT` for slower chains
+- Adjust `TX_POLLING_INTERVAL` for congested networks
+</details>
+
+---
+
+## Cross-Chain Compatibility
 
 This tool can be easily adapted for other CosmWasm-enabled chains:
 
@@ -285,60 +390,30 @@ This tool can be easily adapted for other CosmWasm-enabled chains:
 *Directory of [CosmWasm enabled networks](https://cosmwasm.com/adoption), courtesy of [Confio](https://confio.gmbh/).
 Refer to the [Cosmos Chain Registry](https://github.com/cosmos/chain-registry) for chain parameters and other information.*
 
-## Potential Challenges & Troubleshooting
+---
 
-Throughout the development of this project, there were some notable challenges:
+## Terms
 
-### Cross-Chain Compatibility
-
-- **Different CosmWasm Versions**: Chains may run different CosmWasm versions, requiring adjustments to the contract code. Always check the target chain's `wasmd` version before deployment.
-- **Gas Limit Variations**: Some chains have stricter gas limits than others, which can cause issues with large message tests.
-- **RPC Endpoint Reliability**: Public RPC endpoints can be unstable. Consider using multiple endpoints or setting up your own for critical testing.
-
-### JavaScript Integration Challenges
-
-- **Message Name Alignment**: Ensure js function calls match the contract's ExecuteMsg enum variants exactly. The snake_case vs. camelCase conversion may cause headaches.
-- **Transaction Confirmation**: Different chains have vastly differnt block times and even slightly different query response formatting. Our polling approach may need adjustments for specific chains.
-
-### Data Analysis Considerations
-
-- **Gas Cost Variability**: Gas costs on some chains will vary based on current block utilization, so any "cost" analysis should be viewed as approximations rather than exact predictions. The gas "amount" may be more useful than the "cost".
-- **Regression Model Limitations**: The linear regression model assumes a linear relationship between message size and gas cost, which may not hold across all ranges of message sizes. [Shared test results will be happily accepted!]
-
-### Workflow Optimization
-
-- **WASM Optimization**: Building optimized WASM files can take some time, especially on slower machines. Larger (unoptimized) contracts may not be possible to upload on some chains.
-- **Mnemonic Security**: Always use a dedicated testing wallet with minimal funds when automating transactions, and make use of testnets where possible.
-
-### Common Problems
-
-*RPC errors*:  
-
-- Try a different RPC in `config.js` or verify your endpoints are correct.
-- Add timeout/retry logic by editing the `REQUEST_DELAY` and `TX_CONFIRMATION_TIMEOUT` in `config.js`.
-
-*Out of gas errors*:  
-
-- Increase `GAS_ADJUSTMENT` or use a higher `GAS_PRICE` in `config.js`.
-- For very large messages, you might need to increase the default gas limit in the chain's configuration.
-
-*Deployment failures*:  
-
-- Make sure your wallet mnemonic has enough tokens to pay fees.
-- Check transaction logs using the chain's explorer.
-- Verify the contract code is compatible with the chain's CosmWasm version.
-
-*Permission issues*:  
-
-- Docker or file-permission problems can often be fixed with `chmod +x <script>` or adjusting directory ownership.
-
-*Transaction confirmation timeouts*:  
-
-- If transactions are slow to confirm, increase `TX_CONFIRMATION_TIMEOUT` in `config.js`.
-- In congested networks, increase `TX_POLLING_INTERVAL` to reduce API call frequency.
+- **CosmWasm**: Smart contracting platform for Cosmos ecosystem
+- **Gas**: Computational cost metric in blockchains
+- **WASM**: WebAssembly, compiled format for CosmWasm contracts
+- **Mnemonic**: Seed phrase for cryptographic key generation
+- **RPC Endpoint**: Interface for blockchain node interaction
+- **Base Gas**: Fixed transaction cost component
+- **Marginal Gas**: Variable cost per data unit
+- **Regression Analysis**: Statistical relationship modeling method
 
 ---
 
 ## License
 
-Licensed under the MIT License – see the [LICENSE](LICENSE) file for details.
+MIT License – see [LICENSE](LICENSE) file
+
+---
+
+## Documentation
+
+- [CosmWasm Docs](https://docs.cosmwasm.com/)
+- [Cosmos SDK Docs](https://docs.cosmos.network/)
+- [Rust Book](https://doc.rust-lang.org/book/)
+- [CosmWasm Examples](https://github.com/CosmWasm/cw-examples)
