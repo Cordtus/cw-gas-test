@@ -9,7 +9,24 @@ import { config } from './config.js';
 
 dotenv.config();
 
-// If new contract is instantiated, adds address to config.js for subsequent test functions
+/**
+ * CW Gas Test Deployment Tool
+ * 
+ * Handles deployment and verification of the gas test contract
+ */
+
+// Create output directory if it doesn't exist
+const ensureDirectoryExists = (dir) => {
+    if (config.SAVE_REPORTS_TO && !fs.existsSync(config.SAVE_REPORTS_TO)) {
+        fs.mkdirSync(config.SAVE_REPORTS_TO, { recursive: true });
+    }
+};
+
+/**
+ * Store contract address in config.js
+ * @param {string} contractAddress - address to store
+ * @returns {boolean} - success status
+ */
 function storeAddress(contractAddress) {
     try {
         const configPath = './config.js';
@@ -34,7 +51,11 @@ function storeAddress(contractAddress) {
     }
 }
 
-// Add contract to deployments.json by chain_id
+/**
+ * Add contract to deployments.json by chain_id
+ * @param {string} contractAddress - contract address
+ * @returns {boolean} - success status
+ */
 function updateDeploymentJson(contractAddress) {
     try {
         const deploymentsPath = './deployments.json';
@@ -78,6 +99,45 @@ function updateDeploymentJson(contractAddress) {
     }
 }
 
+/**
+ * Verify contract deployment by querying its config
+ * @param {Object} client - client instance
+ * @param {string} contractAddress - address to verify
+ * @returns {Promise<boolean>} - verification result
+ */
+async function verifyDeployment(client, contractAddress) {
+    try {
+        console.log(`Verifying contract at ${contractAddress}...`);
+        const config = await client.queryContractSmart(contractAddress, { get_config: {} });
+        console.log("Contract verified successfully:", config);
+        
+        // Record verification in a file
+        const timestamp = new Date().toISOString();
+        const verificationRecord = {
+            timestamp,
+            address: contractAddress,
+            chain_id: config.CHAIN_ID,
+            verified: true,
+            config
+        };
+        
+        ensureDirectoryExists();
+        const verificationPath = config.SAVE_REPORTS_TO 
+            ? `${config.SAVE_REPORTS_TO}/verification.json`
+            : './verification.json';
+            
+        fs.writeFileSync(verificationPath, JSON.stringify(verificationRecord, null, 2));
+        return true;
+    } catch (error) {
+        console.error("Contract verification failed:", error);
+        return false;
+    }
+}
+
+/**
+ * Deploy the gas test contract
+ * @returns {Promise<Object>} - deployment result
+ */
 async function deployGasTestContract() {
     try {
         if (!process.env.MNEMONIC) {
@@ -102,6 +162,24 @@ async function deployGasTestContract() {
             }
         );
 
+        // Check if we're using an existing contract
+        if (config.CONTRACT_ADDRESS && config.CONTRACT_ADDRESS.trim() !== '') {
+            console.log(`Checking existing contract at ${config.CONTRACT_ADDRESS}`);
+            const verified = await verifyDeployment(client, config.CONTRACT_ADDRESS);
+            
+            if (verified) {
+                console.log('Using existing verified contract');
+                return {
+                    client,
+                    contractAddress: config.CONTRACT_ADDRESS,
+                    signer: firstAccount.address,
+                    existing: true
+                };
+            } else {
+                console.warn('Existing contract verification failed, proceeding with new deployment');
+            }
+        }
+
         // Upload contract
         console.log('Uploading contract...');
         const wasm = fs.readFileSync(config.WASM_PATH);
@@ -125,6 +203,9 @@ async function deployGasTestContract() {
         );
         console.log('Contract address:', instantiateResult.contractAddress);
         
+        // Verify deployment
+        await verifyDeployment(client, instantiateResult.contractAddress);
+        
         // Update config.js with the new contract address
         const updated = storeAddress(instantiateResult.contractAddress);
         if (!updated) {
@@ -135,7 +216,8 @@ async function deployGasTestContract() {
         return {
             client,
             contractAddress: instantiateResult.contractAddress,
-            signer: firstAccount.address
+            signer: firstAccount.address,
+            existing: false
         };
 
     } catch (error) {

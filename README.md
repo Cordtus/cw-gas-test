@@ -5,6 +5,7 @@ A toolkit for measuring gas costs in CosmWasm smart contracts. This repository p
 ## Purpose
 
 CW Gas Test demonstrates:
+
 - CosmWasm contract development workflows
 - Cross-chain deployment and testing
 - Gas cost analysis methods
@@ -43,6 +44,7 @@ graph TD
 - Transaction hash storage as proof
 - Automated deployment to testing workflow
 - Multi-chain configuration options
+- Interactive chart generation
 
 ---
 
@@ -56,10 +58,10 @@ cw-gas-test/
 ├── scripts/             # JavaScript automation
 │   ├── config.js        # Chain configuration
 │   ├── deploy.js        # Contract deployment
-│   ├── test-gas.js      # Gas testing script
-│   ├── analyze-results.js # Analysis of results
+│   ├── test-gas.js      # Gas testing
+│   ├── analyze-results.js # Analysis + Report Generation
 │   ├── package.json     # JS dependencies
-│   ├── deployments.json # (Optional) tracks deployed addresses per chain
+│   ├── deployments.json # Tracks deployment addresses per chain
 │   └── .env             # Mnemonic ONLY (create from template)
 ├── Cargo.toml           # Rust dependencies
 ├── rust-toolchain.toml  # Rust version spec
@@ -67,8 +69,6 @@ cw-gas-test/
 ├── analyze_results.py   # [Optional] Python data visualization
 └── cw-gas-test.sh       # Complete workflow (build + deploy + test + analyze)
 ```
-
----
 
 ## Setup Instructions
 
@@ -78,7 +78,7 @@ cw-gas-test/
 2. **Node.js** (v18.0.0+)
 3. **Yarn** (or npm)
 4. **Docker** (for contract optimization)
-5. **Fee tokens** on the target network (enough to cover contract deployment and test transactions)
+5. **Fee tokens** on the target network
 6. **`jq`** (for JSON parsing in scripts)
 7. **Python** (optional, for extra visualization)
 
@@ -92,6 +92,7 @@ cd cw-gas-test
 # Make the scripts executable
 chmod +x build.sh cw-gas-test.sh
 ```
+
 </details>
 
 <details>
@@ -104,7 +105,7 @@ Example:
 // =============================
 // CHAIN CONFIGURATION
 // =============================
-// Edit accordingly for your target chain
+// Edit for your target chain
 export const config = {
   // Network settings
   RPC_ENDPOINT: 'http://localhost:26657',
@@ -140,6 +141,7 @@ export const config = {
 
 - **`CONTRACT_ADDRESS`** is optional. Leave it blank to trigger **new deployment** (unless one is found in `deployments.json`).  
 - If you already have a contract deployed, you can put its address here (or ideally, add it to `deployments.json` and make a PR).
+
 </details>
 
 <details>
@@ -153,7 +155,6 @@ export const config = {
   ```
 
 *key and wallet will be derived using the standard ../118/0/0/0 hdpath*
-*12 or 24 word mnemonics are valid*
 
 If `.env` doesn't exist, copy `.env.template` to `.env` and fill in your mnemonic:
 
@@ -190,8 +191,9 @@ yarn analyze         # analyze-results.js
 This will:
 
 - Deploy (if `CONTRACT_ADDRESS` is empty) or reuse an existing contract.
-- Run gas tests [varied message sizes, formats, character types.]
-- Generate a report in CSV.
+- Run gas tests. [varied message sizes, formats, character types.]
+- Generate a report in CSV, Markdown, and interactive HTML.
+
 </details>
 
 <details>
@@ -209,21 +211,21 @@ This will:
 2. Build the contract if needed (via `./build.sh`)  
 3. Deploy the contract if none is set  
 4. Run the test suite (`test-gas.js`)  
-5. Generate an analysis report (`analyze-results.js`)  
-6. Optionally run Python visualization if Python/pip are installed  
+5. Generate an analysis report and visualizations
 
 When complete, you'll see:
 
 - **`gas_results.csv`** – Raw test data
 - **`gas_analysis.md`** – High-level summary with regression analysis  
-- **`gas_analysis.png`** – (If using Python) Visualization of the results
+- **`gas_visualization.html`** – Interactive visualization of results
+
 </details>
 
 ## Sample Output
 
 Results in `gas_results.csv`:
 
-| Message Length | Gas Used | Cost (usei) |
+| Message Length | Gas Used | Cost (ustake) |
 |----------------|----------|-------------|
 | 1              | 129298   | 2585.96     |
 | 10             | 129671   | 2593.41     |
@@ -244,7 +246,7 @@ Regression analysis output:
 
 ## Formula
 Total Gas = 129256.99 + 41.37 × Message Size (bytes)
-Total Cost = Total Gas × 0.02 usei/gas unit
+Total Cost = Total Gas × 0.02 ustake/gas unit
 ```
 
 ---
@@ -280,6 +282,11 @@ The smart contract includes:
    - `GetTestRuns`: Retrieve test run statistics (paginated)
    - `GetGasSummary`: Get gas usage analysis summary
 
+4. **Error Handling**:
+   - Custom error types for better error handling
+   - Input validation with meaningful error messages
+   - Proper authorization checks
+
 ---
 
 ## Customizing Tests
@@ -287,7 +294,12 @@ The smart contract includes:
 You can edit parameters in `scripts/config.js` (like `TEST_MESSAGE_LENGTHS`, network endpoints) to suit your environment:
 
 ```js
-TEST_MESSAGE_LENGTHS: [1, 100, 500, 1000],
+// New parameter options
+MAX_PARALLEL_REQUESTS: 3,          // Control parallel execution
+GENERATE_VISUALIZATION: true,      // Toggle visualization generation
+SMALL_MESSAGE_THRESHOLD: 200,      // Threshold for small/large message
+RETRY_ATTEMPTS: 2,                 // Number of retries on failure
+MAX_MESSAGE_SIZE: 10000,           // Max msg size
 ```
 
 ### Advanced Testing
@@ -327,6 +339,7 @@ If you already have a contract deployed:
 ## Extension Projects
 
 Potential enhancements:
+
 - Batch transaction benchmarking
 - Complex storage pattern testing
 - Web-based visualization dashboard
@@ -343,6 +356,7 @@ Potential enhancements:
 - Try alternate RPC endpoints in `config.js`
 - Adjust `REQUEST_DELAY` and `TX_CONFIRMATION_TIMEOUT` values
 - Verify endpoint supports required query methods
+
 </details>
 
 <details>
@@ -351,6 +365,7 @@ Potential enhancements:
 - Increase `GAS_ADJUSTMENT` or `GAS_PRICE` in `config.js`
 - Reduce test message sizes for chains with stricter limits
 - Check chain-specific gas configuration
+
 </details>
 
 <details>
@@ -360,6 +375,7 @@ Potential enhancements:
 - Check transaction logs in block explorer
 - Verify contract compatibility with chain's CosmWasm version
 - Check for chain-specific code size limitations
+
 </details>
 
 <details>
@@ -367,6 +383,7 @@ Potential enhancements:
 
 - Run `chmod +x <script>` for execution permission
 - Verify Docker daemon permissions
+
 </details>
 
 <details>
@@ -374,18 +391,16 @@ Potential enhancements:
 
 - Increase `TX_CONFIRMATION_TIMEOUT` for slower chains
 - Adjust `TX_POLLING_INTERVAL` for congested networks
+
 </details>
 
 ---
 
 ## Cross-Chain Compatibility
 
-This tool can be easily adapted for other CosmWasm-enabled chains:
+This tool can be adapted for other CosmWasm-enabled chains by updating `config.js`.
 
-- Update `config.js` with target chain RPC endpoints, gas price, address prefix etc.
-- Rebuild contract if required by a breaking `wasmd` version update (e.g., changes in `cosmwasm-std` dependencies):
-  - Update `Cargo.toml` dependencies to match target chain
-  - Recompile with `./build.sh`
+For different CosmWasm versions, update `Cargo.toml` dependencies to match the target chain and recompile with `./build.sh`.
 
 *Directory of [CosmWasm enabled networks](https://cosmwasm.com/adoption), courtesy of [Confio](https://confio.gmbh/).
 Refer to the [Cosmos Chain Registry](https://github.com/cosmos/chain-registry) for chain parameters and other information.*
