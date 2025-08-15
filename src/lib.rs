@@ -1,12 +1,41 @@
 use cosmwasm_std::{
   entry_point, Binary, Deps, DepsMut, Env, MessageInfo, Response, StdResult,
-  to_json_binary, Addr, Uint128, 
+  to_json_binary, Addr, Uint128, StdError,
 };
 use cw_storage_plus::{Bound, Item, Map};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-// Optimized contract state
+// Custom error type
+#[derive(Error, Debug, PartialEq)]
+pub enum ContractError {
+    #[error("{0}")]
+    Std(#[from] StdError),
+
+    #[error("Unauthorized")]
+    Unauthorized {},
+
+    #[error("Invalid message length: {length}, expected: {expected}")]
+    InvalidMessageLength { length: u64, expected: u64 },
+
+    #[error("Message too large: {size} bytes exceeds maximum of {max} bytes")]
+    MessageTooLarge { size: u64, max: u64 },
+
+    #[error("Invalid run ID: {0}")]
+    InvalidRunId(String),
+
+    #[error("Invalid chain ID: {0}")]
+    InvalidChainId(String),
+
+    #[error("Invalid gas value: {0}")]
+    InvalidGasValue(String),
+    
+    #[error("No data available")]
+    NoData {},
+}
+
+// Contract state
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct State {
   pub owner: Addr,
@@ -29,8 +58,8 @@ pub struct TestRunStats {
   // Use a compact timestamp format (seconds since epoch)
   pub timestamp: u64,
   pub message_count: u64, 
-  pub total_gas: Uint128,  // Rename for clarity
-  pub avg_gas_per_byte: Uint128, // Shorter name for storage efficiency
+  pub total_gas: Uint128,
+  pub avg_gas_per_byte: Uint128,
   pub chain_id: String,
   // Store tx hashes in a space-efficient format - comma separated
   pub tx_proof: Option<String>, // Optional field for tx hash proofs
@@ -48,8 +77,12 @@ pub struct InstantiateMsg {
 pub enum ExecuteMsg {
   // Store a message of any length
   StoreMessage { content: String },
-  // Store a message with specific length
+  
+  // Store a message with a specific target length
+  // If content is longer than length, it will be truncated
+  // If content is shorter than length, it will be padded with spaces
   StoreFixedLength { content: String, length: u64 },
+  
   // Record aggregated test run data with transaction proofs
   RecordTestRun {
       run_id: String,
@@ -59,34 +92,29 @@ pub enum ExecuteMsg {
       chain: String,        // chain_id shortened
       tx_proof: Option<String>, // tx_hashes renamed for clarity
   },
+  
   // Clear old test data (admin only)
   ClearData {},
 }
 
-// Query messages with optimized names
+// Query messages
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum QueryMsg {
-  // Get contract configuration
   GetConfig {},
-  // Get a specific message by ID
   GetMessage { id: String },
-  // List all messages (with pagination)
   ListMessages { 
       start_after: Option<String>,
       limit: Option<u32>,
   },
-  // Get test run statistics (with pagination)
   GetTestRuns {
       start_after: Option<String>,
       limit: Option<u32>,
   },
-  // Get gas usage summary
   GetGasSummary {},
 }
 
-// Response types optimized for space
-
+// Response types
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
 pub struct ConfigResponse {
   pub owner: String,
@@ -116,7 +144,7 @@ pub struct TestRunResponse {
   pub gas: Uint128,
   pub avg_gas: Uint128,
   pub chain: String,
-  pub tx_count: u32, // Number of transaction proofs
+  pub tx_count: u32, // Number of tx proofs
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema)]
@@ -133,10 +161,11 @@ pub struct GasSummary {
   pub gas_per_byte: Uint128,
 }
 
-// Efficient storage definitions
+// Storage constants
 pub const STATE: Item<State> = Item::new("state");
 pub const MESSAGES: Map<&str, StoredMessage> = Map::new("msgs");
 pub const TEST_RUNS: Map<&str, TestRunStats> = Map::new("runs");
+pub const MAX_MESSAGE_SIZE: u64 = 10000; // Define a max msg size
 
 #[entry_point]
 pub fn instantiate(
@@ -144,7 +173,7 @@ pub fn instantiate(
   _env: Env,
   info: MessageInfo,
   _msg: InstantiateMsg,
-) -> StdResult<Response> {
+) -> Result<Response, ContractError> {
   let state = State {
       owner: info.sender.clone(),
       test_run_count: 0,
@@ -164,7 +193,7 @@ pub fn execute(
   env: Env,
   info: MessageInfo,
   msg: ExecuteMsg,
-) -> StdResult<Response> {
+) -> Result<Response, ContractError> {
   match msg {
       ExecuteMsg::StoreMessage { content } => 
           execute_store_message(deps, env, info, content),
@@ -177,14 +206,23 @@ pub fn execute(
   }
 }
 
+/// Store msg with actual length
 pub fn execute_store_message(
   deps: DepsMut,
   env: Env,
   _info: MessageInfo,
   content: String,
-) -> StdResult<Response> {
-  let id = format!("msg_{}", env.block.height);
+) -> Result<Response, ContractError> {
+  // Validate msg size
   let length = content.len() as u64;
+  if length > MAX_MESSAGE_SIZE {
+      return Err(ContractError::MessageTooLarge { 
+          size: length, 
+          max: MAX_MESSAGE_SIZE 
+      });
+  }
+
+  let id = format!("msg_{}", env.block.height);
 
   let message = StoredMessage {
       content,
@@ -200,13 +238,22 @@ pub fn execute_store_message(
       .add_attribute("length", length.to_string()))
 }
 
+// Store a message with a specific target length
 pub fn execute_store_fixed_length(
   deps: DepsMut,
   env: Env,
   _info: MessageInfo,
   content: String,
   target_length: u64,
-) -> StdResult<Response> {
+) -> Result<Response, ContractError> {
+  // Validate target length
+  if target_length > MAX_MESSAGE_SIZE {
+      return Err(ContractError::MessageTooLarge { 
+          size: target_length, 
+          max: MAX_MESSAGE_SIZE 
+      });
+  }
+  
   let id = format!("msg_{}_{}", env.block.height, target_length);
   
   // Adjust content to match target length
@@ -220,6 +267,14 @@ pub fn execute_store_fixed_length(
   };
   
   let actual_length = adjusted_content.len() as u64;
+
+  // Verify adjustment worked correctly
+  if actual_length != target_length {
+      return Err(ContractError::InvalidMessageLength { 
+          length: actual_length, 
+          expected: target_length 
+      });
+  }
 
   let message = StoredMessage {
       content: adjusted_content,
@@ -235,6 +290,7 @@ pub fn execute_store_fixed_length(
       .add_attribute("length", actual_length.to_string()))
 }
 
+// Record test run statistics
 pub fn execute_record_test_run(
   deps: DepsMut,
   env: Env,
@@ -245,11 +301,26 @@ pub fn execute_record_test_run(
   avg_gas: Uint128,
   chain: String,
   tx_proof: Option<String>,
-) -> StdResult<Response> {
+) -> Result<Response, ContractError> {
+  // Validate run_id format
+  if run_id.trim().is_empty() {
+      return Err(ContractError::InvalidRunId("Run ID cannot be empty".into()));
+  }
+
+  // Validate chain id format
+  if chain.trim().is_empty() {
+      return Err(ContractError::InvalidChainId("Chain ID cannot be empty".into()));
+  }
+
+  // Validate gas value
+  if gas.is_zero() && count > 0 {
+      return Err(ContractError::InvalidGasValue("Gas cannot be zero for non-empty test runs".into()));
+  }
+  
   // Only owner can record test runs
-  let mut state = STATE.load(deps.storage)?;
+  let state = STATE.load(deps.storage)?;
   if info.sender != state.owner {
-      return Err(cosmwasm_std::StdError::generic_err("Unauthorized"));
+      return Err(ContractError::Unauthorized {});
   }
   
   let test_run = TestRunStats {
@@ -264,9 +335,10 @@ pub fn execute_record_test_run(
   TEST_RUNS.save(deps.storage, &run_id, &test_run)?;
   
   // Update state
-  state.test_run_count += 1;
-  state.last_test_timestamp = Some(env.block.time.seconds());
-  STATE.save(deps.storage, &state)?;
+  let mut updated_state = state;
+  updated_state.test_run_count += 1;
+  updated_state.last_test_timestamp = Some(env.block.time.seconds());
+  STATE.save(deps.storage, &updated_state)?;
   
   let tx_count = tx_proof.as_ref().map_or(0, |hashes| {
       hashes.split(',').count() as u32
@@ -280,19 +352,20 @@ pub fn execute_record_test_run(
       .add_attribute("tx_count", tx_count.to_string()))
 }
 
+// Clear all stored data (admin only)
 pub fn execute_clear_data(
   deps: DepsMut,
   env: Env,
   info: MessageInfo,
-) -> StdResult<Response> {
+) -> Result<Response, ContractError> {
   let state = STATE.load(deps.storage)?;
   
   // Only owner can clear data
   if info.sender != state.owner {
-      return Err(cosmwasm_std::StdError::generic_err("Unauthorized"));
+      return Err(ContractError::Unauthorized {});
   }
   
-  // Delete all messages (efficient using range_raw)
+  // Delete all messages (range_raw for efficiency)
   let keys_to_remove: Vec<String> = MESSAGES
       .keys(deps.storage, None, None, cosmwasm_std::Order::Ascending)
       .collect::<Result<Vec<_>, _>>()?;
@@ -335,6 +408,7 @@ pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
   }
 }
 
+// Query contract configuration
 fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
   let state = STATE.load(deps.storage)?;
   
@@ -345,6 +419,7 @@ fn query_config(deps: Deps) -> StdResult<ConfigResponse> {
   })
 }
 
+// Query msg by id
 fn query_message(deps: Deps, id: String) -> StdResult<MessageResponse> {
   let message = MESSAGES.load(deps.storage, &id)?;
   
@@ -356,6 +431,7 @@ fn query_message(deps: Deps, id: String) -> StdResult<MessageResponse> {
   })
 }
 
+/// List msgs paginated
 fn query_list_messages(deps: Deps, start_after: Option<String>, limit: Option<u32>) -> StdResult<ListMessagesResponse> {
   // Default limit is 10, max allowed is 30
   let limit = limit.unwrap_or(10).min(30) as usize;
@@ -385,6 +461,7 @@ fn query_list_messages(deps: Deps, start_after: Option<String>, limit: Option<u3
   })
 }
 
+/// Query prev runs paginated
 fn query_test_runs(deps: Deps, start_after: Option<String>, limit: Option<u32>) -> StdResult<TestRunsResponse> {
   // Default limit is 5, max allowed is 20
   let limit = limit.unwrap_or(5).min(20) as usize;
@@ -418,10 +495,11 @@ fn query_test_runs(deps: Deps, start_after: Option<String>, limit: Option<u32>) 
   Ok(TestRunsResponse { runs: runs? })
 }
 
+/// Query gas usage metrics
 fn query_gas_summary(deps: Deps) -> StdResult<GasSummary> {
   // Compute summary statistics from stored test runs
   let runs: StdResult<Vec<TestRunStats>> = TEST_RUNS
-      .range(deps.storage, None::<Bound<&str>>, None, cosmwasm_std::Order::Ascending)
+      .range(deps.storage, None, None, cosmwasm_std::Order::Ascending)
       .map(|item| item.map(|(_, run)| run))
       .collect();
   
@@ -474,4 +552,184 @@ fn query_gas_summary(deps: Deps) -> StdResult<GasSummary> {
       total_bytes,
       gas_per_byte,
   })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cosmwasm_std::testing::{mock_dependencies, mock_env, mock_info};
+    use cosmwasm_std::{coins, from_binary};
+
+    #[test]
+    fn proper_initialization() {
+        let mut deps = mock_dependencies();
+        let info = mock_info("creator", &coins(1000, "earth"));
+        let msg = InstantiateMsg {};
+
+        // Should succeed
+        let res = instantiate(deps.as_mut(), mock_env(), info, msg).unwrap();
+        assert_eq!(0, res.messages.len());
+
+        // Check state
+        let state = STATE.load(deps.as_ref().storage).unwrap();
+        assert_eq!(state.owner, "creator");
+        assert_eq!(state.test_run_count, 0);
+        assert_eq!(state.last_test_timestamp, None);
+    }
+
+    #[test]
+    fn store_message() {
+        let mut deps = mock_dependencies();
+        let info = mock_info("creator", &coins(1000, "earth"));
+        let msg = InstantiateMsg {};
+        instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+        // Store valid message
+        let res = execute(
+            deps.as_mut(),
+            mock_env(),
+            info.clone(),
+            ExecuteMsg::StoreMessage { content: "test message".to_string() },
+        ).unwrap();
+        assert_eq!(res.attributes.len(), 3);
+
+        // Test too large message
+        let large_msg = "x".repeat((MAX_MESSAGE_SIZE + 1) as usize);
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::StoreMessage { content: large_msg },
+        ).unwrap_err();
+        
+        // Should return MessageTooLarge error
+        match err {
+            ContractError::MessageTooLarge { size, max } => {
+                assert_eq!(size, MAX_MESSAGE_SIZE + 1);
+                assert_eq!(max, MAX_MESSAGE_SIZE);
+            },
+            e => panic!("unexpected error: {:?}", e),
+        }
+    }
+
+    #[test]
+    fn fixed_length_message() {
+        let mut deps = mock_dependencies();
+        let info = mock_info("creator", &coins(1000, "earth"));
+        let msg = InstantiateMsg {};
+        instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+        // Test padding (content shorter than target)
+        let res = execute(
+            deps.as_mut(),
+            mock_env(),
+            info.clone(),
+            ExecuteMsg::StoreFixedLength { 
+                content: "test".to_string(), 
+                length: 10
+            },
+        ).unwrap();
+        assert_eq!(res.attributes.len(), 3);
+        
+        // Check the message was stored correctly
+        let msg_id = res.attributes[1].value.clone(); // id attribute
+        let query_res: MessageResponse = from_binary(
+            &query(deps.as_ref(), mock_env(), QueryMsg::GetMessage { id: msg_id }).unwrap()
+        ).unwrap();
+        assert_eq!(query_res.length, 10);
+        assert_eq!(query_res.content, "test      "); // 4 chars + 6 spaces
+
+        // Test truncation (content longer than target)
+        let res = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::StoreFixedLength { 
+                content: "this is a longer test".to_string(), 
+                length: 7
+            },
+        ).unwrap();
+        
+        let msg_id = res.attributes[1].value.clone();
+        let query_res: MessageResponse = from_binary(
+            &query(deps.as_ref(), mock_env(), QueryMsg::GetMessage { id: msg_id }).unwrap()
+        ).unwrap();
+        assert_eq!(query_res.length, 7);
+        assert_eq!(query_res.content, "this is"); // truncated to 7 chars
+    }
+
+    #[test]
+    fn test_clear_data() {
+        let mut deps = mock_dependencies();
+        let info = mock_info("creator", &coins(1000, "earth"));
+        let msg = InstantiateMsg {};
+        instantiate(deps.as_mut(), mock_env(), info.clone(), msg).unwrap();
+
+        // Store some test data
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info.clone(),
+            ExecuteMsg::StoreMessage { content: "test1".to_string() },
+        ).unwrap();
+        
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info.clone(),
+            ExecuteMsg::StoreMessage { content: "test2".to_string() },
+        ).unwrap();
+
+        // Record a test run
+        execute(
+            deps.as_mut(),
+            mock_env(),
+            info.clone(),
+            ExecuteMsg::RecordTestRun { 
+                run_id: "test_run_1".to_string(),
+                count: 2,
+                gas: Uint128::new(100000),
+                avg_gas: Uint128::new(50000),
+                chain: "test-chain".to_string(),
+                tx_proof: Some("tx1,tx2".to_string())
+            },
+        ).unwrap();
+
+        // Test unauthorized clear
+        let unauth_info = mock_info("someone_else", &coins(1000, "earth"));
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            unauth_info,
+            ExecuteMsg::ClearData {},
+        ).unwrap_err();
+        
+        // Should return Unauthorized error
+        match err {
+            ContractError::Unauthorized {} => {},
+            e => panic!("unexpected error: {:?}", e),
+        }
+
+        // Test authorized clear
+        let res = execute(
+            deps.as_mut(),
+            mock_env(),
+            info,
+            ExecuteMsg::ClearData {},
+        ).unwrap();
+        assert_eq!(res.attributes.len(), 2);
+
+        // Verify data was cleared - count should be 0
+        let config: ConfigResponse = from_binary(
+            &query(deps.as_ref(), mock_env(), QueryMsg::GetConfig {}).unwrap()
+        ).unwrap();
+        assert_eq!(config.test_count, 0);
+
+        // Verify gas summary is reset
+        let summary: GasSummary = from_binary(
+            &query(deps.as_ref(), mock_env(), QueryMsg::GetGasSummary {}).unwrap()
+        ).unwrap();
+        assert_eq!(summary.msg_count, 0);
+        assert_eq!(summary.total_gas, Uint128::zero());
+    }
 }
