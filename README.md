@@ -1,25 +1,18 @@
 # CW Gas Test
 
-A toolkit for measuring gas costs in CosmWasm smart contracts. This repository provides a contract and automation scripts for deployment, testing, and analysis.
+A fairly useless toolkit for measuring gas costs in CosmWasm smart contracts. The true intent of this project is to provide a guided walkthrough of creating and deploying a non-standard cw contract, complete with automated deployment scripts, testing, and analysis. This goes a little outside the realm of the standard mintable/burnable token, or NFT collection deployment to encourage thinking outside of the box, with some portion of the project being completely off-chain.
 
 ## Purpose
-
-CW Gas Test demonstrates:
-
-- CosmWasm contract development workflows
-- Cross-chain deployment and testing
-- Gas cost analysis methods
 
 The project measures gas consumption across different message sizes, formats, and character types. Results are stored in CSV format locally and on-chain.
 
 Example results are available in this [analysis report](https://gist.github.com/Cordtus/8753d81f135055e06973894cb3455f05).
 
-## Prerequisites
+## Prerequisite Knowledge
 
-- Rust (beginner to intermediate)
-- JavaScript/Node.js
-- Basic blockchain concepts
-- Basic Cosmos SDK knowledge (helpful)
+- Rust (beginner)
+- JavaScript
+- Cosmos SDK basics
 
 ---
 
